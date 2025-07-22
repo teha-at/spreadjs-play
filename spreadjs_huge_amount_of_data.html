@@ -241,9 +241,9 @@
                 hideLoader();
             }, 500);
 
-            sheet.resumePaint();
-            spread.resumeCalcService();
             sheet.resumeDirty();
+            spread.resumeCalcService();
+            sheet.resumePaint();
         }
 
         setTimeout(() => loadPage(), 1);
