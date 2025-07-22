@@ -156,43 +156,43 @@
         const yieldToUI = () => new Promise(requestAnimationFrame);
 
         const fetchJSONWithProgress = async (url, onProgress) => {
-          const resp = await fetch(url);
-          if (!resp.ok) throw new Error(resp.statusText);
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error(resp.statusText);
 
-          const total = Number(resp.headers.get('content-length')) || 0;
-          const reader = resp.body.getReader();
-          const chunks = [];
-          let received = 0;
+            const total = Number(resp.headers.get('content-length')) || 0;
+            const reader = resp.body.getReader();
+            const chunks = [];
+            let received = 0;
 
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+            while (true) {
+                const {done, value} = await reader.read();
+                if (done) break;
 
-            chunks.push(value);
-            received += value.byteLength;
+                chunks.push(value);
+                received += value.byteLength;
 
-            if (total) {
-              onProgress(Math.round(received / total * 100), received, total);
-            } else {
-              // no length header
-              onProgress(null, received, null);
+                if (total) {
+                    onProgress(Math.round(received / total * 100), received, total);
+                } else {
+                    // no length header
+                    onProgress(null, received, null);
+                }
+
+                await yieldToUI();
             }
 
-            await yieldToUI();
-          }
-
-          // Reassemble and parse
-          const blob = new Blob(chunks);
-          const text = await blob.text();
-          return JSON.parse(text);
+            // Reassemble and parse
+            const blob = new Blob(chunks);
+            const text = await blob.text();
+            return JSON.parse(text);
         }
 
         const loadPage = async () => {
             sheet.suspendPaint();
 
             const items = await fetchJSONWithProgress('comments_100k_with_status.json', (pct, bytes, total) => {
-              if (pct != null) loaderText.textContent = `Downloading: ${pct}%`;
-              else loaderText.textContent = `Downloading… ${(bytes/1024).toFixed(1)} KB`;
+                if (pct != null) loaderText.textContent = `Downloading: ${pct}%`;
+                else loaderText.textContent = `Downloading… ${(bytes / 1024).toFixed(1)} KB`;
             })
 
             // convert to a typed array
@@ -225,9 +225,8 @@
                 await yieldToUI()
             }
 
-
             // finish up the loading for the user
-            loadingStatus.updateValue(`Loading: completed`);
+            loadingStatus.updateValue('Loading: completed');
             setProgress(100);
 
             setTimeout(() => {
