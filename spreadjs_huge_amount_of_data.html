@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SpreadJS plays with a huge amount of data</title>
+
+    <!-- Excel 2016 Colorful theme CSS -->
+    <link
+            href="https://unpkg.com/@grapecity/spread-sheets@18.1.3/styles/gc.spread.sheets.excel2016colorful.css"
+            rel="stylesheet"
+    />
+
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+        }
+
+        /* Make the SpreadJS container fill the viewport */
+        #ss {
+            width: 100%;
+            /*height: 100vh;*/
+            height: calc(100% - 25px);
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+
+        #statusBar {
+            bottom: 0;
+            height: 25px;
+            width: 100%;
+            position: relative;
+            float: left;
+        }
+
+        #loader {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, .50);
+            backdrop-filter: blur(2px);
+            z-index: 9999;
+            font: 16px/1.4 system-ui, sans-serif;
+            transition: opacity .25s;
+        }
+
+        #loader.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid #ccc;
+            border-top-color: #1a73e8;
+            border-radius: 50%;
+            animation: spin .8s linear infinite;
+            margin-bottom: 12px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+<body>
+<div id="loader">
+    <div class="spinner"></div>
+    <p id="loaderText">Loading ...</p>
+</div>
+<div id="ss"></div>
+<div id="statusBar"></div>
+
+<!-- SpreadJS “all” bundle -->
+<script src="https://unpkg.com/@grapecity/spread-sheets@18.1.3/dist/gc.spread.sheets.all.min.js"></script>
+<script>
+    window.onload = async () => {
+        const loaderEl = document.getElementById('loader');
+        const loaderText = document.getElementById('loaderText');
+
+        const setProgress = (pct) => {
+            loaderText.textContent = `Loading: ${pct}%`;
+        };
+
+        const hideLoader = () => {
+            loaderEl.classList.add('hidden');
+            // optional: remove from DOM later
+            setTimeout(() => loaderEl.remove(), 400);
+        };
+
+        // 1) Initialize workbook & get the sheet
+        const spread = new GC.Spread.Sheets.Workbook(
+            document.getElementById("ss"),
+            {sheetCount: 1}
+        );
+
+        const sheet = spread.getActiveSheet();
+
+        // add statusBar
+        const statusBar = new GC.Spread.Sheets.StatusBar.StatusBar(document.getElementById('statusBar'));
+        statusBar.bind(spread);
+        let statusItem = new GC.Spread.Sheets.StatusBar.StatusItem('loadingStatus', {
+            menuContent: 'Loading status',
+            value: 'Loading',
+            itemName: 'loadingStatus',
+            showStatusInContextMenu: false,
+        });
+        statusItem.onCreateItemView = (container) => {
+            const statusBarDiv = document.createElement("div");
+            statusBarDiv.innerHTML = `<span>Loading ...</span>`;
+            container.appendChild(statusBarDiv);
+
+            statusItem.updateValue = (value) => {
+                statusBarDiv.innerHTML = `<span>${value}</span>`;
+            };
+        };
+
+        statusBar.add(statusItem);
+
+        const headers = [
+            {name: "Comment ID", width: 80},
+            {name: "Post ID", width: 80},
+            {name: "Name", width: 300},
+            {name: "Email", width: 300},
+            {name: "Status", width: 140},
+            {name: "Body", width: "*"},
+        ];
+
+        // configure sheet dimensions, frozen header, and column count
+        const COL_COUNT = headers.length;
+        sheet.setColumnCount(COL_COUNT);
+        sheet.frozenRowCount(1);
+
+        headers.forEach((e, c) => {
+            sheet.setValue(0, c, e.name);
+            sheet.setColumnWidth(c, e.width);
+        });
+
+        // add auto filter
+        spread.options.allowAutoExtendFilterRange = true; // enable the auto extend filter range.
+        const filter = new GC.Spread.Sheets.Filter.HideRowFilter(new GC.Spread.Sheets.Range(1, 0, 5, COL_COUNT));
+        sheet.rowFilter(filter);
+
+        // combo box
+        const comboBoxCellType = new GC.Spread.Sheets.CellTypes.ComboBox();
+        comboBoxCellType.items(["ok", "checking", "rejected", "ok"]);
+        sheet.getCell(-1, 4).cellType(comboBoxCellType);
+
+        const yieldToUI = () => new Promise(requestAnimationFrame);
+
+        const fetchJSONWithProgress = async (url, onProgress) => {
+          const resp = await fetch(url);
+          if (!resp.ok) throw new Error(resp.statusText);
+
+          const total = Number(resp.headers.get('content-length')) || 0;
+          const reader = resp.body.getReader();
+          const chunks = [];
+          let received = 0;
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            chunks.push(value);
+            received += value.byteLength;
+
+            if (total) {
+              onProgress(Math.round(received / total * 100), received, total);
+            } else {
+              // no length header
+              onProgress(null, received, null);
+            }
+
+            await yieldToUI();
+          }
+
+          // Reassemble and parse
+          const blob = new Blob(chunks);
+          const text = await blob.text();
+          return JSON.parse(text);
+        }
+
+        const loadPage = async () => {
+            sheet.suspendPaint();
+
+            const items = await fetchJSONWithProgress('comments_100k_with_status.json', (pct, bytes, total) => {
+              if (pct != null) loaderText.textContent = `Downloading: ${pct}%`;
+              else loaderText.textContent = `Downloading… ${(bytes/1024).toFixed(1)} KB`;
+            })
+
+            // convert to a typed array
+            const data = items.map(item => [
+                item.id,
+                item.postId,
+                item.name,
+                item.email,
+                item.status,
+                item.body
+            ]);
+
+            const rowCount = items.length;
+            sheet.setRowCount(rowCount);
+
+            // split the data in 100 chunks to create a loading bar
+            const chunkSize = Math.floor(rowCount / 100);
+            const chunks = [...Array(Math.ceil(data.length / chunkSize))].map(_ => data.splice(0, chunkSize));
+            const loadingStatus = statusBar.get('loadingStatus');
+
+            // run over all chunks to prevent the data for spread js and
+            // shows the user the progress
+            for (let i = 0; i < chunks.length; i++) {
+                const chunk = chunks[i];
+                sheet.setArray(i * chunkSize + 1, 0, chunk, false);
+
+                loadingStatus.updateValue(`Loading: ${i}%`);
+                setProgress(i);
+
+                await yieldToUI()
+            }
+
+
+            // finish up the loading for the user
+            loadingStatus.updateValue(`Loading: completed`);
+            setProgress(100);
+
+            setTimeout(() => {
+                loadingStatus.updateValue('');
+                hideLoader();
+            }, 500);
+
+            sheet.resumePaint();
+        }
+
+        setTimeout(() => loadPage(), 1);
+
+    };
+</script>
+</body>
+</html>
+
+
