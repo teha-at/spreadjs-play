@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SpreadJS Lazy-Load Demo</title>
+
+    <!-- Excel 2016 Colorful theme CSS -->
+    <link
+            href="https://unpkg.com/@grapecity/spread-sheets@18.1.3/styles/gc.spread.sheets.excel2016colorful.css"
+            rel="stylesheet"
+    />
+
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+        }
+
+        /* Make the SpreadJS container fill the viewport */
+        #ss {
+            width: 100%;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+    </style>
+</head>
+<body>
+<div id="ss"></div>
+
+<!-- SpreadJS “all” bundle -->
+<script src="https://unpkg.com/@grapecity/spread-sheets@18.1.3/dist/gc.spread.sheets.all.min.js"></script>
+<script>
+    window.onload = function () {
+        const TOTAL_ROWS = 500;    // total items (JSONPlaceholder comments)
+        const PAGE_SIZE = 25;     // rows per fetch
+        const loadedPages = new Set();
+
+        // 1) Initialize workbook & get the sheet
+        const spread = new GC.Spread.Sheets.Workbook(
+            document.getElementById("ss"),
+            {sheetCount: 1}
+        );
+        const sheet = spread.getActiveSheet();
+
+        // 2) Configure sheet dimensions, frozen header, and column count
+        const COL_COUNT = 5;
+        sheet.setRowCount(TOTAL_ROWS + 1);
+        sheet.setColumnCount(COL_COUNT);
+        sheet.frozenRowCount(1);
+
+        // 3) Stretch columns to fill the full width
+        const container = document.getElementById("ss");
+        const containerWidth = container.clientWidth;
+        const colWidth = containerWidth / COL_COUNT;
+        for (let c = 0; c < COL_COUNT; c++) {
+            sheet.setColumnWidth(c, colWidth);
+        }
+
+        // 4) Set header labels
+        const headers = ["Post ID", "Comment ID", "Name", "Email", "Body"];
+        headers.forEach((txt, c) => {
+            sheet.setValue(0, c, txt);
+        });
+
+        // 5) Function to load a page (1-based) of data
+        function loadPage(pageIndex) {
+            if (loadedPages.has(pageIndex)) return;
+            loadedPages.add(pageIndex);
+
+            const start = (pageIndex - 1) * PAGE_SIZE;
+            fetch(`https://jsonplaceholder.typicode.com/comments?_start=${start}&_limit=${PAGE_SIZE}`)
+                .then(r => r.json())
+                .then(items => {
+                    // Map each object→array of primitives
+                    const data = items.map(item => [
+                        item.postId,
+                        item.id,
+                        item.name,
+                        item.email,
+                        item.body
+                    ]);
+                    sheet.suspendPaint();
+                    // Paste into rows 1-50, 51-100, etc.
+                    sheet.setArray(start + 1, 0, data);
+                    sheet.resumePaint();
+                });
+        }
+
+        // 6) Initial load of page 1
+        loadPage(1);
+
+        // 7) On viewport change, detect which pages intersect and load them
+        sheet.bind(GC.Spread.Sheets.Events.TopRowChanged, (sender, args) => {
+            // const newTopRow = args.newTopRow;
+            const topRow = sheet.getViewportTopRow(1);
+            const bottomRow = sheet.getViewportBottomRow(1);
+
+            const firstPage = Math.floor((topRow - 1) / PAGE_SIZE) + 1;
+            const lastPage = Math.floor((bottomRow - 1) / PAGE_SIZE) + 1;
+
+            for (let p = firstPage; p <= lastPage; p++) {
+                if (p > 0 && p <= Math.ceil(TOTAL_ROWS / PAGE_SIZE)) {
+                    loadPage(p);
+                }
+            }
+
+        });
+
+    };
+</script>
+</body>
+</html>
+
+
