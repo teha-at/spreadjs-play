@@ -192,6 +192,8 @@
 
         const loadPage = async () => {
             sheet.suspendPaint();
+            spread.suspendCalcService();
+            sheet.suspendDirty();
 
             const items = await fetchJSONWithProgress('comments_100k_with_status.json', (pct, bytes, total) => {
                 if (pct != null) loaderText.textContent = `Downloading: ${pct}%`;
@@ -240,6 +242,8 @@
             }, 500);
 
             sheet.resumePaint();
+            spread.resumeCalcService();
+            sheet.resumeDirty();
         }
 
         setTimeout(() => loadPage(), 1);
