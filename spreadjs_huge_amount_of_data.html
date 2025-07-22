@@ -170,15 +170,18 @@
 
                 chunks.push(value);
                 received += value.byteLength;
+                const percentage = Math.round(received / total * 100);
 
                 if (total) {
-                    onProgress(Math.round(received / total * 100), received, total);
+                    onProgress(percentage, received, total);
                 } else {
                     // no length header
                     onProgress(null, received, null);
                 }
 
-                await yieldToUI();
+                if (percentage % 5 === 0) {
+                    await yieldToUI();
+                }
             }
 
             // Reassemble and parse
@@ -222,7 +225,9 @@
                 loadingStatus.updateValue(`Loading: ${i}%`);
                 setProgress(i);
 
-                await yieldToUI()
+                if (i % 5 === 0) {
+                    await yieldToUI();
+                }
             }
 
             // finish up the loading for the user
