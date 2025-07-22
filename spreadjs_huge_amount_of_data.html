@@ -142,6 +142,9 @@
             sheet.setValue(0, c, e.name);
             sheet.setColumnWidth(c, e.width);
         });
+        sheet.getRange(0, 0, 1, COL_COUNT)
+            .hAlign(GC.Spread.Sheets.HorizontalAlign.center)
+            .font("bold 12px system-ui");
 
         // add auto filter
         spread.options.allowAutoExtendFilterRange = true; // enable the auto extend filter range.
