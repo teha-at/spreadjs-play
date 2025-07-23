@@ -17,11 +17,29 @@
             height: 100%;
         }
 
+        #toolbar {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 8px 12px;
+            background: #f5f5f5;
+            border-bottom: 1px solid #ddd;
+            box-sizing: border-box;
+        }
+
+        #toolbar h1 {
+            margin: 0;
+            font: 600 16px/1.2 system-ui, sans-serif;
+        }
+
+        #toolbar select {
+            margin-left: 6px;
+        }
+
         /* Make the SpreadJS container fill the viewport */
         #ss {
             width: 100%;
-            /*height: 100vh;*/
-            height: calc(100% - 25px);
+            height: calc(100% - 25px - 48px); /* minus statusBar & toolbar height */
             box-sizing: border-box;
             overflow: hidden;
         }
@@ -75,6 +93,21 @@
     <div class="spinner"></div>
     <p id="loaderText">Loading ...</p>
 </div>
+
+<header id="toolbar">
+    <h1>Comments Viewer</h1>
+    <label>
+        Data source:
+        <select id="dataSource">
+            <option value="comments_1k_with_status.json" selected>1k</option>
+            <option value="comments_10k_with_status.json">10k</option>
+            <option value="comments_100k_with_status.json">100k</option>
+            <option value="https://teha-at.github.io/spreadjs-play/comments_100k_with_status.json">remote 100k</option>
+        </select>
+    </label>
+    <!-- add more controls later -->
+</header>
+
 <div id="ss"></div>
 <div id="statusBar"></div>
 
@@ -82,17 +115,19 @@
 <script src="https://unpkg.com/@grapecity/spread-sheets@18.1.3/dist/gc.spread.sheets.all.min.js"></script>
 <script>
     window.onload = async () => {
+        const dataSourceSelect = document.getElementById('dataSource');
         const loaderEl = document.getElementById('loader');
         const loaderText = document.getElementById('loaderText');
 
-        const setProgress = (pct) => {
-            loaderText.textContent = `Loading: ${pct}%`;
+        const setProgress = (text) => {
+            loaderEl.classList.remove('hidden');
+            loaderText.textContent = `${text}`;
         };
 
         const hideLoader = () => {
             loaderEl.classList.add('hidden');
             // optional: remove from DOM later
-            setTimeout(() => loaderEl.remove(), 400);
+            // setTimeout(() => loaderEl.remove(), 400);
         };
 
         // 1) Initialize workbook & get the sheet
@@ -210,14 +245,17 @@
             return JSON.parse(text);
         }
 
-        const loadPage = async () => {
+        const loadPage = async (url) => {
             sheet.suspendPaint();
             spread.suspendCalcService();
             sheet.suspendDirty();
 
-            const items = await fetchJSONWithProgress('comments_100k_with_status.json', (pct, bytes, total) => {
-                if (pct != null) loaderText.textContent = `Downloading: ${pct}%`;
-                else loaderText.textContent = `Downloading… ${(bytes / 1024).toFixed(1)} KB`;
+            const items = await fetchJSONWithProgress(url, (pct, bytes, total) => {
+                if (pct !== null) {
+                    setProgress(`Downloading: ${(pct).toFixed(0)}%`);
+                } else {
+                    setProgress(`Downloading… ${(bytes / 1024).toFixed(1)} KB`);
+                }
             })
 
             // convert to a typed array
@@ -244,8 +282,9 @@
                 const chunk = chunks[i];
                 sheet.setArray(i * chunkSize + 1, 0, chunk, false);
 
-                loadingStatus.updateValue(`Loading: ${i}%`);
-                setProgress(i);
+                let msg = `Loading: ${i}%`;
+                loadingStatus.updateValue(msg);
+                setProgress(msg);
 
                 if (i % 5 === 0) {
                     await yieldToUI();
@@ -254,7 +293,7 @@
 
             // finish up the loading for the user
             loadingStatus.updateValue('Loading: completed');
-            setProgress(100);
+            setProgress('Loading: 100%');
 
             setTimeout(() => {
                 loadingStatus.updateValue('');
@@ -268,8 +307,12 @@
             sheet.resumePaint();
         }
 
-        setTimeout(() => loadPage(), 1);
+        setTimeout(() => loadPage(dataSourceSelect.value), 1);
 
+        dataSourceSelect.addEventListener('change', () => {
+            sheet.clear(1, 0, sheet.getRowCount() - 1, sheet.getColumnCount(), GC.Spread.Sheets.SheetArea.viewport);
+            loadPage(dataSourceSelect.value);
+        });
     };
 </script>
 </body>
